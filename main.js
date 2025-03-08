@@ -1,22 +1,48 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
+const { open } = require('sqlite');
 
 const URL = 'https://buscheb.ru/';
 const OUTPUT_DIR = path.join(process.cwd(), 'json');
+const DB_PATH = path.join(process.cwd(), 'data.sqlite');
 
 // Создаем папку json, если её нет
 if (!fs.existsSync(OUTPUT_DIR)) {
-    fs.mkdirSync(OUTPUT_DIR, {recursive: true});
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+}
+
+// Инициализация базы данных
+async function initDb() {
+    const db = await open({
+        filename: DB_PATH,
+        driver: sqlite3.Database
+    });
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS vehicles (
+            id INTEGER PRIMARY KEY,
+            lon REAL,
+            lat REAL,
+            dir INTEGER,
+            speed INTEGER,
+            lasttime INTEGER,
+            gos_num TEXT,
+            rid INTEGER,
+            rnum TEXT,
+            rtype TEXT,
+            low_floor INTEGER,
+            wifi INTEGER,
+            anim_key TEXT,
+            big_jump INTEGER
+        );
+    `);
+    return db;
 }
 
 (async () => {
-    // const browser = await puppeteer.launch({ headless: true });
-    const browser = await puppeteer.launch({
-        headless: false,
-        defaultViewport: null,
-        args: ['--start-maximized']
-    });
+    const db = await initDb();
+    const browser = await puppeteer.launch({ headless: false, defaultViewport: null, args: ['--start-maximized'] });
     const page = await browser.newPage();
 
     await page.setRequestInterception(true);
@@ -39,18 +65,37 @@ if (!fs.existsSync(OUTPUT_DIR)) {
                 const filePath = path.join(OUTPUT_DIR, `${timestamp}.json`);
                 fs.writeFileSync(filePath, JSON.stringify(json, null, 2), 'utf8');
                 console.log(`Saved: ${filePath}`);
+
+                // Сохранение в базу данных
+                if (json.anims) {
+                    const insertStmt = `
+                        INSERT INTO vehicles (id, lon, lat, dir, speed, lasttime, gos_num, rid, rnum, rtype, low_floor, wifi, anim_key, big_jump)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `;
+                    const stmt = await db.prepare(insertStmt);
+                    for (const point of json.anims) {
+                        await stmt.run([
+                            point.id, point.lon, point.lat, point.dir, point.speed, point.lasttime,
+                            point.gos_num, point.rid, point.rnum, point.rtype, point.low_floor,
+                            point.wifi, point.anim_key, point.big_jump
+                        ]);
+                    }
+                    await stmt.finalize();
+                    console.log(`Inserted ${json.anims.length} records into database.`);
+                }
             } catch (error) {
-                console.error('Error saving JSON:', error);
+                console.error('Error saving JSON or inserting into database:', error);
             }
         }
     });
 
     console.log(`Navigating to ${URL}...`);
-    await page.goto(URL, {waitUntil: 'networkidle2'});
+    await page.goto(URL, { waitUntil: 'networkidle2' });
 
     console.log('Press CTRL+C to stop the script.');
     process.on('SIGINT', async () => {
-        console.log('Closing browser...');
+        console.log('Closing browser and database...');
+        await db.close();
         await browser.close();
         process.exit(0);
     });
