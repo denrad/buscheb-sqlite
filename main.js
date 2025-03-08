@@ -20,8 +20,9 @@ async function initDb() {
         driver: sqlite3.Database
     });
     await db.exec(`
-        CREATE TABLE IF NOT EXISTS vehicles (
-            id INTEGER PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS points (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vehicle_id INTEGER,
             lon REAL,
             lat REAL,
             dir INTEGER,
@@ -69,7 +70,7 @@ async function initDb() {
                 // Сохранение в базу данных
                 if (json.anims) {
                     const insertStmt = `
-                        INSERT INTO vehicles (id, lon, lat, dir, speed, lasttime, gos_num, rid, rnum, rtype, low_floor, wifi, anim_key, big_jump)
+                        INSERT INTO points (vehicle_id, lon, lat, dir, speed, lasttime, gos_num, rid, rnum, rtype, low_floor, wifi, anim_key, big_jump)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     `;
                     const stmt = await db.prepare(insertStmt);
