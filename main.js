@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
-const { open } = require('sqlite');
+const {open} = require('sqlite');
 
 const URL = 'https://buscheb.ru/';
 const OUTPUT_DIR = path.join(process.cwd(), 'json');
@@ -10,7 +10,7 @@ const DB_PATH = path.join(process.cwd(), 'data.sqlite');
 
 // Создаем папку json, если её нет
 if (!fs.existsSync(OUTPUT_DIR)) {
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+    fs.mkdirSync(OUTPUT_DIR, {recursive: true});
 }
 
 // Инициализация базы данных с индексами
@@ -20,29 +20,30 @@ async function initDb() {
         driver: sqlite3.Database
     });
     await db.exec(`
-        CREATE TABLE IF NOT EXISTS points (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        CREATE TABLE IF NOT EXISTS points
+        (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
             vechicle_id INTEGER,
-            lon REAL,
-            lat REAL,
-            dir INTEGER,
-            speed INTEGER,
-            lasttime DATETIME,
-            gos_num TEXT,
-            rid INTEGER,
-            rnum TEXT,
-            rtype TEXT,
-            low_floor INTEGER,
-            wifi INTEGER,
-            anim_key TEXT,
-            big_jump INTEGER
+            lon         REAL,
+            lat         REAL,
+            dir         INTEGER,
+            speed       INTEGER,
+            lasttime    DATETIME,
+            gos_num     TEXT,
+            rid         INTEGER,
+            rnum        TEXT,
+            rtype       TEXT,
+            low_floor   INTEGER,
+            wifi        INTEGER,
+            anim_key    TEXT,
+            big_jump    INTEGER
         );
     `);
 
     // Добавляем индексы для ускорения запросов
-    await db.exec(`CREATE INDEX IF NOT EXISTS idx_points_vehicle ON points(vechicle_id);`);
-    await db.exec(`CREATE INDEX IF NOT EXISTS idx_points_route ON points(rnum, rtype);`);
-    await db.exec(`CREATE INDEX IF NOT EXISTS idx_points_grouping ON points(vechicle_id, rnum, rtype);`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_points_vehicle ON points (vechicle_id);`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_points_route ON points (rnum, rtype);`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_points_grouping ON points (vechicle_id, rnum, rtype);`);
 
     return db;
 }
@@ -55,8 +56,14 @@ function convertToSQLiteDatetime(dateString) {
 
 (async () => {
     const db = await initDb();
-    const browser = await puppeteer.launch({ headless: false, defaultViewport: null, args: ['--start-maximized'] });
+
+    const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
     const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36');
 
     await page.setRequestInterception(true);
     page.on('request', (request) => {
@@ -82,7 +89,8 @@ function convertToSQLiteDatetime(dateString) {
                 // Сохранение в базу данных
                 if (json.anims) {
                     const insertStmt = `
-                        INSERT INTO points (vechicle_id, lon, lat, dir, speed, lasttime, gos_num, rid, rnum, rtype, low_floor, wifi, anim_key, big_jump)
+                        INSERT INTO points (vechicle_id, lon, lat, dir, speed, lasttime, gos_num, rid, rnum, rtype,
+                                            low_floor, wifi, anim_key, big_jump)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     `;
                     const stmt = await db.prepare(insertStmt);
@@ -104,7 +112,7 @@ function convertToSQLiteDatetime(dateString) {
     });
 
     console.log(`Navigating to ${URL}...`);
-    await page.goto(URL, { waitUntil: 'networkidle2' });
+    await page.goto(URL, {waitUntil: 'networkidle2'});
 
     console.log('Press CTRL+C to stop the script.');
     process.on('SIGINT', async () => {
